@@ -24,6 +24,7 @@ from video_llama.models import *
 from video_llama.processors import *
 from video_llama.runners import *
 from video_llama.tasks import *
+import csv
 
 #%%
 def parse_args():
@@ -72,7 +73,7 @@ chat = Chat(model, vis_processor, device='cuda:{}'.format(args.gpu_id))
 print('Initialization Finished')
 
 # ========================================
-#             Gradio Setting
+#             Gradio Setting (removed)
 # ========================================
 
 def gradio_reset(chat_state, img_list):
@@ -127,121 +128,39 @@ def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature):
     print(chat_state)
     return chatbot, chat_state, img_list
 
-title = """
-<h1 align="center"><a href="https://github.com/DAMO-NLP-SG/Video-LLaMA"><img src="https://s1.ax1x.com/2023/05/22/p9oQ0FP.jpg", alt="Video-LLaMA" border="0" style="margin: 0 auto; height: 200px;" /></a> </h1>
+def load_video_files(directory):
+    return [os.path.join(directory, file) for file in os.listdir(directory) if file.endswith('.mp4')]
 
-<h1 align="center">Video-LLaMA: An Instruction-tuned Audio-Visual Language Model for Video Understanding</h1>
+def process_video(video_path, chat, chat_state):
+    print(f"Processing video: {video_path}")
+    video_data = decord.VideoReader(video_path)
 
-<h5 align="center">  Introduction: Video-LLaMA is a multi-model large language model that achieves video-grounded conversations between humans and computers \
-    by connecting language decoder with off-the-shelf unimodal pre-trained models. </h5> 
+    #chat_state, img_list = chat.upload_video_without_audio(video_data, chat_state, [])
+    chat_state, img_list = chat.upload_video_without_audio_v2(video_path, chat_state, [])
+    user_message = "This is a driving video. In 100 words, describe the cars, pedestrians, weather and scenery that are passing through the scene in the video."
+    chat.ask(user_message, chat_state)
+    llm_message = chat.answer(conv=chat_state, img_list=img_list, num_beams=1, temperature=0.1, max_new_tokens=300, max_length=2000)[0]
 
-<div style='display:flex; gap: 0.25rem; '>
-<a href='https://github.com/DAMO-NLP-SG/Video-LLaMA'><img src='https://img.shields.io/badge/Github-Code-success'></a>
-<a href='https://huggingface.co/spaces/DAMO-NLP-SG/Video-LLaMA'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue'></a> 
-<a href='https://huggingface.co/DAMO-NLP-SG/Video-LLaMA-Series'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a> 
-<a href='https://modelscope.cn/studios/damo/video-llama/summary'><img src='https://img.shields.io/badge/ModelScope-Demo-blueviolet'></a> 
-<a href='https://arxiv.org/abs/2306.02858'><img src='https://img.shields.io/badge/Paper-PDF-red'></a>
-</div>
+    return llm_message
 
+def main():
+    args = parse_args()
+    cfg = Config(args)
 
-Thank you for using the Video-LLaMA Demo Page! If you have any questions or feedback, feel free to contact us. 
+    chat_state = default_conversation.copy() if args.model_type == 'vicuna' else conv_llava_llama_2.copy()
+    directory = '/home/acd13972py/pjt-t4-ltr/original/Video_Diffusion/data_mp4'
+    video_files = load_video_files(directory)
+    print(video_files)
+    with open('video_captions.csv', mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Video File', 'Caption'])
+        for video_file in video_files:
+            chat_state = default_conversation.copy()
+            caption = process_video(video_file, chat, chat_state)
+            print(f"Caption for {video_file}: {caption}")
+            writer.writerow([video_file, caption])
 
-If you find Video-LLaMA interesting, please give us a star on GitHub.
-
-Current online demo uses the 7B version of Video-LLaMA due to resource limitations. We have released \
-         the 13B version on our GitHub repository.
-
-
-"""
-
-Note_markdown = ("""
-### Note
-Video-LLaMA is a prototype model and may have limitations in understanding complex scenes, long videos, or specific domains.
-The output results may be influenced by input quality, limitations of the dataset, and the model's susceptibility to illusions. Please interpret the results with caution.
-
-**Copyright 2023 Alibaba DAMO Academy.**
-""")
-
-cite_markdown = ("""
-## Citation
-If you find our project useful, hope you can star our repo and cite our paper as follows:
-```
-@article{damonlpsg2023videollama,
-  author = {Zhang, Hang and Li, Xin and Bing, Lidong},
-  title = {Video-LLaMA: An Instruction-tuned Audio-Visual Language Model for Video Understanding},
-  year = 2023,
-  journal = {arXiv preprint arXiv:2306.02858}
-  url = {https://arxiv.org/abs/2306.02858}
-}
-""")
-
-case_note_upload = ("""
-### We provide some examples at the bottom of the page. Simply click on them to try them out directly.
-""")
-
-#TODO show examples below
-
-with gr.Blocks() as demo:
-    gr.Markdown(title)
-
-    with gr.Row():
-        with gr.Column(scale=0.5):
-            video = gr.Video()
-            image = gr.Image(type="filepath")
-            gr.Markdown(case_note_upload)
-
-            upload_button = gr.Button(value="Upload & Start Chat", interactive=True, variant="primary")
-            clear = gr.Button("Restart")
-            
-            num_beams = gr.Slider(
-                minimum=1,
-                maximum=10,
-                value=1,
-                step=1,
-                interactive=True,
-                label="beam search numbers)",
-            )
-            
-            temperature = gr.Slider(
-                minimum=0.1,
-                maximum=2.0,
-                value=1.0,
-                step=0.1,
-                interactive=True,
-                label="Temperature",
-            )
-
-            audio = gr.Checkbox(interactive=True, value=False, label="Audio")
-            gr.Markdown(Note_markdown)
-        with gr.Column():
-            chat_state = gr.State()
-            img_list = gr.State()
-            chatbot = gr.Chatbot(label='Video-LLaMA')
-            text_input = gr.Textbox(label='User', placeholder='Upload your image/video first, or directly click the examples at the bottom of the page.', interactive=False)
-            
-
-    with gr.Column():
-        gr.Examples(examples=[
-            [f"examples/dog.jpg", "Which breed is this dog? "],
-            [f"examples/JonSnow.jpg", "Who's the man on the right? "],
-            [f"examples/Statue_of_Liberty.jpg", "Can you tell me about this building? "],
-        ], inputs=[image, text_input])
-
-        gr.Examples(examples=[
-            [f"examples/skateboarding_dog.mp4", "What is the dog doing? "],
-            [f"examples/birthday.mp4", "What is the boy doing? "],
-            [f"examples/IronMan.mp4", "Is the guy in the video Iron Man? "],
-        ], inputs=[video, text_input])
-        
-    gr.Markdown(cite_markdown)
-    upload_button.click(upload_imgorvideo, [video, image, text_input, chat_state,chatbot], [video, image, text_input, upload_button, chat_state, img_list,chatbot])
+if __name__ == "__main__":
+    main()
     
-    text_input.submit(gradio_ask, [text_input, chatbot, chat_state], [text_input, chatbot, chat_state]).then(
-        gradio_answer, [chatbot, chat_state, img_list, num_beams, temperature], [chatbot, chat_state, img_list]
-    )
-    clear.click(gradio_reset, [chat_state, img_list], [chatbot, video, image, text_input, upload_button, chat_state, img_list], queue=False)
-    
-demo.launch(share=False, enable_queue=True, server_name="localhost", server_port=7860)
-
-
 # %%

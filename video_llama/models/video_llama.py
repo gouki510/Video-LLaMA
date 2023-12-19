@@ -593,7 +593,7 @@ class VideoLLAMA(Blip2Base):
             fusion_head_layers=fusion_head_layers,
             frozen_llama_proj=frozen_llama_proj,
             frozen_video_Qformer=frozen_video_Qformer,
-            frozen_audio_Qformer=frozen_audio_Qformer,
+            frozen_audio_Qformer=frozen_audio_Qformer,                  
             num_video_query_token=num_video_query_token,
             num_audio_query_token = num_audio_query_token,
             imagebind_ckpt_path = imagebind_ckpt_path,

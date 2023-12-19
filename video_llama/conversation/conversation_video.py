@@ -302,6 +302,32 @@ class Chat:
         img_list.append(image_emb)
         conv.append_message(conv.roles[0], "<Video><ImageHere></Video> "+ msg)
         return "Received."
+    
+    def upload_video_without_audio_v2(self, video_path, conv, img_list):
+        msg = ""
+        if isinstance(video_path, str):  # is a video path
+            ext = os.path.splitext(video_path)[-1].lower()
+            print(video_path)
+            # image = self.vis_processor(image).unsqueeze(0).to(self.device)
+            video, msg = load_video(
+                video_path=video_path,
+                n_frms=8,
+                height=224,
+                width=224,
+                sampling ="uniform", return_msg = True
+            )
+            video = self.vis_processor.transform(video)
+            video = video.unsqueeze(0).to(self.device)
+            # print(image)
+        else:
+            raise NotImplementedError
+        
+        
+        # conv.system = "You can understand the video that the user provides.  Follow the instructions carefully and explain your answers in detail."
+        image_emb, _ = self.model.encode_videoQformer_visual(video)
+        img_list.append(image_emb)
+        conv.append_message(conv.roles[0], "<Video><ImageHere></Video> "+ msg)
+        return conv, img_list
 
     def upload_img(self, image, conv, img_list):
 
